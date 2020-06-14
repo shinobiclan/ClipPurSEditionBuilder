@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30204.135
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ClipSE", "ClipSE.csproj", "{B50C8FD0-C387-4C0C-88FE-410A61C1873D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B50C8FD0-C387-4C0C-88FE-410A61C1873D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B50C8FD0-C387-4C0C-88FE-410A61C1873D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B50C8FD0-C387-4C0C-88FE-410A61C1873D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B50C8FD0-C387-4C0C-88FE-410A61C1873D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {33917123-2474-4A0F-B7FA-03A57D573121}
+	EndGlobalSection
+EndGlobal
