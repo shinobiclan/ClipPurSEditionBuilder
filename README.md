@@ -9,5 +9,5 @@
 После шифруете сами ссылки и в коде уже изменяете данные на ваши ссылки.
 
 Скриншоты билдера:
-![Builder_Main](https://b.radikal.ru/b19/2001/9a/edd48098cc10.png)
+![Builder_Main](https://d.radikal.ru/d04/2006/30/e6d36f876af5.png)
 ![Builder_Panel](https://b.radikal.ru/b13/2001/9b/ec1f2aea889c.png)
